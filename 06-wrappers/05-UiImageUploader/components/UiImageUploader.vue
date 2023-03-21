@@ -1,15 +1,115 @@
 <template>
   <div class="image-uploader">
-    <label class="image-uploader__preview image-uploader__preview-loading" style="--bg-url: url('/link.jpeg')">
-      <span class="image-uploader__text">Загрузить изображение</span>
-      <input type="file" accept="image/*" class="image-uploader__input" />
+    <label
+      class="image-uploader__preview"
+      :class="{
+        'image-uploader__preview-loading': state === $options.States.LOADING,
+      }"
+      :style="previewSrc && `--bg-url: url('${previewSrc}')`"
+    >
+      <span class="image-uploader__text">{{ stateText }}</span>
+      <input
+        ref="input"
+        type="file"
+        accept="image/*"
+        class="image-uploader__input"
+        v-bind="$attrs"
+        @change="handleFileSelect"
+        @click="handleClick"
+      />
     </label>
   </div>
 </template>
 
 <script>
+const States = {
+  EMPTY: 'empty',
+  LOADING: 'loading',
+  FILLED: 'filled',
+};
+
 export default {
   name: 'UiImageUploader',
+  inheritAttrs: false,
+
+  States,
+
+  props: {
+    preview: {
+      type: String,
+    },
+
+    uploader: {
+      type: Function,
+    },
+  },
+
+  emits: ['select', 'upload', 'error', 'remove'],
+
+  data() {
+    return {
+      state: this.preview ? States.FILLED : States.EMPTY,
+      selectedImage: null,
+    };
+  },
+
+  computed: {
+    previewSrc() {
+      return this.selectedImage ?? this.preview;
+    },
+
+    stateText() {
+      return {
+        [States.EMPTY]: 'Загрузить изображение',
+        [States.LOADING]: 'Загрузка...',
+        [States.FILLED]: 'Удалить изображение',
+      }[this.state];
+    },
+  },
+
+  methods: {
+    handleFileSelect(e) {
+      const file = e.target.files[0];
+
+      this.selectedImage = URL.createObjectURL(file);
+      this.$emit('select', file);
+
+      if (!this.uploader) {
+        this.state = States.FILLED;
+        return;
+      }
+
+      this.state = States.LOADING;
+
+      return this.uploader(file)
+        .then((result) => {
+          this.state = States.FILLED;
+          this.$emit('upload', result);
+        })
+        .catch((error) => {
+          this.state = States.EMPTY;
+          this.removeFile();
+          this.$emit('error', error);
+        })
+        .finally(() => {
+          this.selectedImage = null;
+        });
+    },
+
+    handleClick($event) {
+      if (this.state === States.LOADING) {
+        $event.preventDefault();
+      } else if (this.state === States.FILLED) {
+        $event.preventDefault();
+        this.removeFile();
+        this.state = States.EMPTY;
+        this.$emit('remove');
+      }
+    },
+    removeFile() {
+      this.$refs.input.value = '';
+    },
+  },
 };
 </script>
 
